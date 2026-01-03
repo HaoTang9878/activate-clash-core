@@ -5,11 +5,14 @@ nohup ./clash -f config.yaml > clash.log 2>&1 &
 # Wait for a moment to ensure Clash starts successfully
 sleep 1
 
-# Set HTTP and HTTPS proxy environment variables
-export http_proxy=http://127.0.0.1:7890
-export https_proxy=http://127.0.0.1:7890
+# Read mixed-port from config.yaml
+PORT=$(grep -oP 'mixed-port:\s*\K\d+' config.yaml)
 
-echo "Clash proxy activated!"
+# Set HTTP and HTTPS proxy environment variables
+export http_proxy=http://127.0.0.1:$PORT
+export https_proxy=http://127.0.0.1:$PORT
+
+echo "Clash proxy activated on port $PORT!"
 echo "HTTP_PROXY: $http_proxy"
 echo "HTTPS_PROXY: $https_proxy"
 echo ""
