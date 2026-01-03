@@ -1,0 +1,20 @@
+#!/bin/bash
+# Start Clash proxy server in background
+nohup ./clash -f config.yaml > clash.log 2>&1 &
+
+# Wait for a moment to ensure Clash starts successfully
+sleep 1
+
+# Set HTTP and HTTPS proxy environment variables
+export http_proxy=http://127.0.0.1:7890
+export https_proxy=http://127.0.0.1:7890
+
+echo "Clash proxy activated!"
+echo "HTTP_PROXY: $http_proxy"
+echo "HTTPS_PROXY: $https_proxy"
+echo ""
+echo "To deactivate the proxy, run:"
+echo "unset http_proxy https_proxy"
+echo ""
+echo "To stop Clash, run:"
+echo "pkill clash"

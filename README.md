@@ -9,6 +9,7 @@ https://panel.dg5.biz/
 
 配置文件怎么找：
 首先打开clash-verge，然后点击订阅，右键你的订阅文件然后点击编辑文件，最后将内容复制到config.yaml即可
+注意，这里的config.yaml文件是一个示例，实际还需要你自己去获取配置。
 
 ## 怎么使用
 
@@ -16,11 +17,14 @@ https://panel.dg5.biz/
 
 ```
 $ git clone https://github.com/HaoTang9878/activate-clash-core.git
-$ cd clash
+$ cd activate-clash-core
 ```
 
 - 赋予执行权限:
-chmod +x activate select-node.sh clash
+
+```
+chmod +x activate select-node.sh clash setup-alias.sh
+```
 
 - 开启clash 代理:
 
@@ -32,4 +36,16 @@ chmod +x activate select-node.sh clash
 ```
 ./select-node.sh
 ```
-- 如果要配置环境变量，为大家准备了
+- 如果要配置环境变量，为大家准备了一个自动脚本，可直接运行：
+
+```
+./setup-alias.sh
+```
+
+运行后会自动将以下格式的alias添加到你的bashrc文件中：
+```
+alias activate-clash='source /path/to/activate-clash-core/activate'
+alias select-node='/path/to/activate-clash-core/select-node.sh'
+```
+
+其中 `/path/to/activate-clash-core` 是脚本自动获取的实际安装路径，无需手动修改。
