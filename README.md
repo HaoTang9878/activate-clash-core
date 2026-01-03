@@ -86,3 +86,11 @@ alias select-node='/path/to/activate-clash-core/select-node.sh'
 ```
 
 其中 `/path/to/activate-clash-core` 是脚本自动获取的实际安装路径，无需手动修改。
+
+## 支持与捐赠
+
+如果你觉得这个项目对你有帮助，可以通过以下方式支持：
+
+- **比特币捐赠地址**：`13siKzvBg96RYBS54BPpF7dD7DYgnFMr44`
+
+感谢你的支持！
