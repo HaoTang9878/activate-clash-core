@@ -1,5 +1,11 @@
 # activate-clash-core
-这是终端无图形化页面通过clash内核启动clash的运行脚本，内核已经帮大家下载好了，无需自己手动下载。
+这是终端无图形化页面通过clash内核启动clash的运行脚本，内核已经帮大家下载好了，大家也可根据自己的需求下载不同版本的clash内核。
+
+使用的clash内核信息：
+- 内核名称：mihomo 
+- 版本：v1.19.18
+- 文件名：mihomo-linux-amd64-compatible-v1.19.18.gz
+- 下载地址：https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.18
 
 注意，这需要你自己有一个clash-verge的订阅链接，并且找到你的配置文件，clash-verge的下载链接如下
 https://github.com/Clash-Verge-rev/clash-verge-rev/releases
