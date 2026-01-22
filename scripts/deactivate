@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# 彩色输出定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# 停止 Clash 进程
+if pgrep -x "clash" > /dev/null; then
+    pkill clash
+    echo -e "${YELLOW}正在停止 Clash 进程...${NC}"
+    sleep 1 # 等待进程结束
+    if ! pgrep -x "clash" > /dev/null; then
+         echo -e "${GREEN}✓ Clash 进程已停止。${NC}"
+    else
+         echo -e "${RED}✗ 无法停止 Clash 进程，请尝试手动运行 'pkill -9 clash'。${NC}"
+    fi
+else
+    echo -e "${YELLOW}未检测到运行中的 Clash 进程。${NC}"
+fi
+
+# 清理环境变量
+unset http_proxy https_proxy ALL_PROXY all_proxy
+echo -e "${GREEN}✓ 代理环境变量已清除。${NC}"
+
+# 验证
+if [ -z "$http_proxy" ]; then
+    echo -e "${BLUE}当前环境已恢复直连模式。${NC}"
+else
+    echo -e "${RED}警告：环境变量清理失败，请检查脚本执行方式（应使用 source 或 . 执行）。${NC}"
+fi
