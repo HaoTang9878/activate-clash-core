@@ -29,7 +29,12 @@ cd activate-clash-core
 chmod +x scripts/* clash
 ```
 
-### 3. 导入订阅 (二选一)
+### 3. 创建必要目录
+```bash
+mkdir -p configs logs
+```
+
+### 4. 导入订阅 (二选一)
 
 **方式 A：自动导入（推荐）**
 ```bash
@@ -40,7 +45,7 @@ chmod +x scripts/* clash
 **方式 B：手动导入**
 将你的 `config.yaml` 文件直接放入 `configs/` 目录。
 
-### 4. 安装命令
+### 5. 安装命令
 ```bash
 ./scripts/setup-alias.sh
 source ~/.bashrc  # 让命令立即生效
