@@ -185,6 +185,15 @@ function start_clash() {
         exit 1
     fi
     
+    # 自动创建日志目录
+    mkdir -p "$LOG_DIR"
+    
+    # 自动处理 external-controller 引号问题
+    if [ -f "$config_file" ]; then
+        # 移除 external-controller 值的单引号或双引号
+        sed -i "s/external-controller: ['\"]\(.*\)['\"]/external-controller: \1/g" "$config_file"
+    fi
+    
     # 直接使用clash命令启动，确保日志文件正确命名
     local config_name=$(basename "$config_file" .yaml)
     local log_file="${LOG_DIR}/clash_${config_name}.log"

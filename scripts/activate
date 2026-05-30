@@ -63,12 +63,21 @@ CONFIG_NAME="$(basename "$CONFIG_FILE" .yaml)"
 LOG_FILE="${LOG_DIR}/clash_${CONFIG_NAME}.log"
 
 # 启动 Clash 代理服务器
+echo -e "${BLUE}正在启动 Clash，请稍候...${NC}"
+
+# 自动创建日志目录
+mkdir -p "$LOG_DIR"
+
+# 自动处理 external-controller 引号问题
+if [ -f "$CONFIG_FILE" ]; then
+    # 移除 external-controller 值的单引号或双引号
+    sed -i "s/external-controller: ['\"]\(.*\)['\"]/external-controller: \1/g" "$CONFIG_FILE"
+fi
+
 nohup "$CLASH_BIN" -f "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
 CLASH_PID=$!
 
 # 等待 Clash 启动
-echo -e "${BLUE}正在启动 Clash，请稍候...${NC}"
-sleep 2
 
 # 检查 Clash 是否成功启动
 if ! ps -p $CLASH_PID > /dev/null; then

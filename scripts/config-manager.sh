@@ -93,6 +93,11 @@ function update_config() {
         # 验证配置文件格式
         if grep -q "proxies:" "$output_file"; then
             echo -e "${GREEN}✓ 配置文件格式验证通过。${NC}"
+            
+            # 自动处理 external-controller 引号问题
+            echo -e "${BLUE}正在优化配置文件字段...${NC}"
+            sed -i "s/external-controller: ['\"]\(.*\)['\"]/external-controller: \1/g" "$output_file"
+            echo -e "${GREEN}✓ 自动剥离 external-controller 引号。${NC}"
         else
             echo -e "${YELLOW}警告：配置文件可能不完整，建议检查内容。${NC}"
         fi
