@@ -62,6 +62,33 @@ fi
 CONFIG_NAME="$(basename "$CONFIG_FILE" .yaml)"
 LOG_FILE="${LOG_DIR}/clash_${CONFIG_NAME}.log"
 
+# 检查并自动下载 Country.mmdb 数据库
+MIHOMO_DIR="$HOME/.config/mihomo"
+CLASH_DIR="$HOME/.config/clash"
+MMDB_URL="https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+
+mkdir -p "$MIHOMO_DIR"
+mkdir -p "$CLASH_DIR"
+
+if [ ! -f "$MIHOMO_DIR/Country.mmdb" ] && [ ! -f "$CLASH_DIR/Country.mmdb" ]; then
+    echo -e "${YELLOW}检测到缺少 Country.mmdb 数据库...${NC}"
+    echo -e "${BLUE}正在通过国内加速源(jsDelivr)自动下载...${NC}"
+    curl -Lo "$MIHOMO_DIR/Country.mmdb" "$MMDB_URL"
+    if [ $? -eq 0 ]; then
+        cp "$MIHOMO_DIR/Country.mmdb" "$CLASH_DIR/Country.mmdb" 2>/dev/null
+        echo -e "${GREEN}✓ 数据库下载成功！${NC}"
+    else
+        echo -e "${RED}✗ 数据库下载失败！这可能会导致 Clash 启动崩溃。${NC}"
+    fi
+else
+    # 确保两个目录都有，以兼容不同的核心版本
+    if [ -f "$CLASH_DIR/Country.mmdb" ] && [ ! -f "$MIHOMO_DIR/Country.mmdb" ]; then
+        cp "$CLASH_DIR/Country.mmdb" "$MIHOMO_DIR/Country.mmdb" 2>/dev/null
+    elif [ -f "$MIHOMO_DIR/Country.mmdb" ] && [ ! -f "$CLASH_DIR/Country.mmdb" ]; then
+        cp "$MIHOMO_DIR/Country.mmdb" "$CLASH_DIR/Country.mmdb" 2>/dev/null
+    fi
+fi
+
 # 启动 Clash 代理服务器
 echo -e "${BLUE}正在启动 Clash，请稍候...${NC}"
 
