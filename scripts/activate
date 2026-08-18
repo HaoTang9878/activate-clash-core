@@ -19,6 +19,7 @@ else
 fi
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/lib/config.sh"
 DEFAULT_CONFIG="${BASE_DIR}/configs/config.yaml"
 CONFIG_DIR="${BASE_DIR}/configs"
 LOG_DIR="${BASE_DIR}/logs"
@@ -95,12 +96,6 @@ echo -e "${BLUE}正在启动 Clash，请稍候...${NC}"
 # 自动创建日志目录
 mkdir -p "$LOG_DIR"
 
-# 自动处理 external-controller 引号问题
-if [ -f "$CONFIG_FILE" ]; then
-    # 移除 external-controller 值的单引号或双引号
-    sed -i "s/external-controller: ['\"]\(.*\)['\"]/external-controller: \1/g" "$CONFIG_FILE"
-fi
-
 nohup "$CLASH_BIN" -f "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
 CLASH_PID=$!
 
@@ -133,8 +128,8 @@ export https_proxy=http://127.0.0.1:$PORT
 export ALL_PROXY=socks5://127.0.0.1:$PORT
 export all_proxy=socks5://127.0.0.1:$PORT
 
-# 获取 external-controller 配置（用于 API 访问）
-CONTROLLER=$(grep -oP 'external-controller:\s*\K[^\s]+' "$CONFIG_FILE" 2>/dev/null)
+# 获取 external-controller 配置（用于 API 访问）。YAML 引号不会进入地址。
+CONTROLLER=$(get_clash_config_value "$CONFIG_FILE" "external-controller")
 if [ -z "$CONTROLLER" ]; then
     CONTROLLER="127.0.0.1:9090"
 fi

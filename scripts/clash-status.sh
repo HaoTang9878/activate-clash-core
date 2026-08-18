@@ -14,6 +14,8 @@ SCRIPT_NAME="$(basename "$0")"
 
 # 基础路径设置
 BASE_DIR="$(dirname "$(dirname "$0")")"
+SCRIPT_DIR="${BASE_DIR}/scripts"
+source "$SCRIPT_DIR/lib/config.sh"
 CONFIG_DIR="${BASE_DIR}/configs"
 LOG_DIR="${BASE_DIR}/logs"
 CLASH_BIN="${BASE_DIR}/clash"
@@ -83,15 +85,9 @@ get_api_address() {
         return
     fi
     
-    # 从配置文件读取 external-controller
-    local controller_line=$(grep -i "external-controller" "$config_file" 2>/dev/null)
-    if [ -n "$controller_line" ]; then
-        # 使用简单的方法提取值，去掉空格
-        local controller=$(echo "$controller_line" | awk -F 'external-controller:' '{print $2}' | sed 's/^ *//; s/ *$//')
-        echo "$controller"
-    else
-        echo "127.0.0.1:9090"
-    fi
+    local controller
+    controller=$(get_clash_config_value "$config_file" "external-controller")
+    echo "${controller:-127.0.0.1:9090}"
 }
 
 # 显示Clash运行状态
@@ -187,12 +183,6 @@ function start_clash() {
     
     # 自动创建日志目录
     mkdir -p "$LOG_DIR"
-    
-    # 自动处理 external-controller 引号问题
-    if [ -f "$config_file" ]; then
-        # 移除 external-controller 值的单引号或双引号
-        sed -i "s/external-controller: ['\"]\(.*\)['\"]/external-controller: \1/g" "$config_file"
-    fi
     
     # 直接使用clash命令启动，确保日志文件正确命名
     local config_name=$(basename "$config_file" .yaml)
