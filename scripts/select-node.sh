@@ -85,14 +85,14 @@ get_proxy_groups() {
     local url="http://$CONTROLLER/proxies"
     
     # 测试API连接
-    if ! curl -s "${CURL_AUTH_ARGS[@]}" "$url" > /dev/null 2>&1; then
+    if ! curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url" > /dev/null 2>&1; then
         echo -e "${RED}错误：无法连接到 Clash API！${NC}"
         echo -e "${YELLOW}提示：请确保 Clash 已启动且 API 配置正确。${NC}"
         return 1
     fi
     
     # 获取代理组列表
-    PROXY_GROUPS=$(curl -s "${CURL_AUTH_ARGS[@]}" "$url" | python3 -c "
+    PROXY_GROUPS=$(curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url" | python3 -c "
 import json
 data = json.loads(input())
 groups = []
@@ -192,12 +192,12 @@ echo -e "${BLUE}当前节点组：${NC}$PROXY_GROUP"
 
 # 获取当前节点信息
 url="http://$CONTROLLER/proxies/$PROXY_GROUP"
-CURRENT_NODE=$(curl -s "${CURL_AUTH_ARGS[@]}" "$url" | python3 -c "import json; data = json.loads(input()); print(data.get('now', '未知'))")
+CURRENT_NODE=$(curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url" | python3 -c "import json; data = json.loads(input()); print(data.get('now', '未知'))")
 echo -e "${BLUE}当前选中节点：${NC}$CURRENT_NODE"
 echo ""
 
 # 获取可用节点列表
-NODES_JSON=$(curl -s "${CURL_AUTH_ARGS[@]}" "$url")
+NODES_JSON=$(curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url")
 NODES_LIST=$(echo "$NODES_JSON" | python3 -c "import json; data = json.loads(input()); print('\n'.join(data.get('all', [])))")
 
 # 将节点列表转换为数组
@@ -289,13 +289,13 @@ echo -e "${BLUE}正在切换到节点：${NC}$SELECTED_NODE"
 echo "----------------"
 
 # 使用curl命令切换节点
-if curl -s -X PUT "${CURL_AUTH_ARGS[@]}" -d "{\"name\": \"$SELECTED_NODE\"}" "$url" > /dev/null 2>&1; then
+if curl --noproxy '*' -s -X PUT "${CURL_AUTH_ARGS[@]}" -d "{\"name\": \"$SELECTED_NODE\"}" "$url" > /dev/null 2>&1; then
     # 验证切换结果
     echo -e "${YELLOW}等待节点切换完成...${NC}"
     sleep 2  # 增加等待时间，确保切换生效
     
     # 重新获取当前节点信息
-    proxy_info=$(curl -s "${CURL_AUTH_ARGS[@]}" "$url")
+    proxy_info=$(curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url")
     NEW_CURRENT_NODE=$(echo "$proxy_info" | python3 -c "import json; print(json.loads(input()).get('now', ''))")
     ALL_PROXIES=$(echo "$proxy_info" | python3 -c "import json; data = json.loads(input()); print('\\n'.join(data.get('all', [])))")
     

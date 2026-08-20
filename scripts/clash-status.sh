@@ -16,6 +16,7 @@ SCRIPT_NAME="$(basename "$0")"
 BASE_DIR="$(dirname "$(dirname "$0")")"
 SCRIPT_DIR="${BASE_DIR}/scripts"
 source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/runtime.sh"
 CONFIG_DIR="${BASE_DIR}/configs"
 LOG_DIR="${BASE_DIR}/logs"
 CLASH_BIN="${BASE_DIR}/clash"
@@ -132,7 +133,13 @@ function show_status() {
         echo -e "${BLUE}API 连接：${NC}"
         local api_controller=$(get_api_address)
         local api_url="http://$api_controller"
-        local status_code=$(curl -s -o /dev/null -w "%{http_code}" "$api_url/proxies" 2>/dev/null)
+        local api_secret=$(get_clash_config_value "$DEFAULT_CONFIG" "secret")
+        local api_auth_args=()
+        if [ -n "$api_secret" ]; then
+            api_auth_args=(-H "Authorization: Bearer $api_secret")
+        fi
+        local status_code=$(curl --noproxy '*' -s -o /dev/null -w "%{http_code}" \
+            "${api_auth_args[@]}" "$api_url/proxies" 2>/dev/null)
         if [ "$status_code" == "200" ]; then
             echo -e "  ${GREEN}✓ 可连接${NC} ($api_controller)"
         else
@@ -183,6 +190,14 @@ function start_clash() {
     
     # 自动创建日志目录
     mkdir -p "$LOG_DIR"
+
+    local mihomo_dir="$HOME/.config/mihomo"
+    local clash_dir="$HOME/.config/clash"
+    echo -e "${BLUE}正在检查 Country.mmdb 和 GeoSite.dat...${NC}"
+    if ! ensure_clash_geodata "$mihomo_dir" "$clash_dir"; then
+        echo -e "${RED}错误：地理数据库准备失败，已取消启动。${NC}"
+        exit 1
+    fi
     
     # 直接使用clash命令启动，确保日志文件正确命名
     local config_name=$(basename "$config_file" .yaml)
@@ -191,10 +206,13 @@ function start_clash() {
     nohup "$CLASH_BIN" -f "$config_file" > "$log_file" 2>&1 &
     CLASH_PID=$!
     
-    # 检查是否启动成功
+    # 等待 API 真正就绪，并捕获初始化期间发生的崩溃。
     echo -e "${BLUE}正在检查启动状态...${NC}"
-    sleep 3
-    if is_clash_running; then
+    local controller=$(get_api_address "$config_file")
+    local secret=$(get_clash_config_value "$config_file" "secret")
+    wait_for_clash_api "$CLASH_PID" "$controller" "$secret" 60
+    local start_result=$?
+    if [ "$start_result" -eq 0 ]; then
         echo -e "${GREEN}✓ Clash 启动成功！${NC}"
         echo -e "${BLUE}日志文件：${NC}$log_file"
         echo -e "${BLUE}进程 ID：${NC}$CLASH_PID"
@@ -217,7 +235,11 @@ function start_clash() {
         echo -e "  ALL_PROXY=${ALL_PROXY}"
     else
         echo -e "${RED}✗ Clash 启动失败！${NC}"
-        echo -e "${RED}请查看日志文件 '$log_file' 了解详细错误信息。${NC}"
+        if [ "$start_result" -eq 2 ]; then
+            echo -e "${YELLOW}等待 API 就绪超时，Clash 进程可能仍在初始化。${NC}"
+        fi
+        echo -e "${YELLOW}最近的启动日志：${NC}"
+        tail -n 20 "$log_file" 2>/dev/null
         exit 1
     fi
     
