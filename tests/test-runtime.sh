@@ -38,6 +38,23 @@ ensure_clash_geodata "$MIHOMO_TEST_DIR" "$CLASH_TEST_DIR"
 [ "$(sed -n '1p' "$MIHOMO_TEST_DIR/Country.mmdb.sha256")" = "$expected_country" ]
 [ "$(sed -n '1p' "$MIHOMO_TEST_DIR/GeoSite.dat.sha256")" = "$expected_geosite" ]
 
+# CDN 的数据文件和校验文件短暂不同步时，结构有效的下载仍可用于首次安装。
+FALLBACK_RELEASE_DIR="$TMP_DIR/fallback-release"
+FALLBACK_MIHOMO_DIR="$TMP_DIR/fallback-mihomo"
+FALLBACK_CLASH_DIR="$TMP_DIR/fallback-clash"
+mkdir -p "$FALLBACK_RELEASE_DIR"
+dd if=/dev/zero of="$FALLBACK_RELEASE_DIR/country.mmdb" bs=1048576 count=1 2>/dev/null
+printf 'MaxMind.com\n' >> "$FALLBACK_RELEASE_DIR/country.mmdb"
+dd if=/dev/zero of="$FALLBACK_RELEASE_DIR/geosite.dat" bs=1048576 count=1 2>/dev/null
+printf 'protobuf fixture\n' >> "$FALLBACK_RELEASE_DIR/geosite.dat"
+printf '%064d  country.mmdb\n' 0 > "$FALLBACK_RELEASE_DIR/country.mmdb.sha256sum"
+printf '%064d  geosite.dat\n' 0 > "$FALLBACK_RELEASE_DIR/geosite.dat.sha256sum"
+
+GEODATA_BASE_URL="file://$FALLBACK_RELEASE_DIR"
+ensure_clash_geodata "$FALLBACK_MIHOMO_DIR" "$FALLBACK_CLASH_DIR"
+[ "$(sed -n '1p' "$FALLBACK_MIHOMO_DIR/Country.mmdb.sha256")" = "$(calculate_sha256 "$FALLBACK_RELEASE_DIR/country.mmdb")" ]
+[ "$(sed -n '1p' "$FALLBACK_MIHOMO_DIR/GeoSite.dat.sha256")" = "$(calculate_sha256 "$FALLBACK_RELEASE_DIR/geosite.dat")" ]
+
 # API 就绪检查必须绕过代理；模拟成功响应以验证等待逻辑。
 curl() {
     [ "$1" = "--noproxy" ] && [ "$2" = "*" ]

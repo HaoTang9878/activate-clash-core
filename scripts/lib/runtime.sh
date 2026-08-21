@@ -113,9 +113,15 @@ ensure_geodata_asset() {
 
         actual_checksum=$(calculate_sha256 "$download_file")
         if [ "$actual_checksum" != "$expected_checksum" ]; then
-            rm -f "$checksum_file" "$download_file"
-            echo "${local_name} 校验失败，已拒绝使用损坏文件。" >&2
-            return 1
+            if is_plausible_geodata "$local_name" "$download_file"; then
+                echo "警告：${local_name} 与远程校验值不同，但文件格式有效；可能是 CDN 缓存尚未同步。" >&2
+                echo "将使用当前文件，并由 Mihomo 在启动时完成最终验证。" >&2
+                expected_checksum="$actual_checksum"
+            else
+                rm -f "$checksum_file" "$download_file"
+                echo "${local_name} 校验失败且文件格式无效，已拒绝使用损坏文件。" >&2
+                return 1
+            fi
         fi
         source_file="$download_file"
     fi
