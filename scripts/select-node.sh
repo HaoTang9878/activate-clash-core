@@ -17,6 +17,7 @@ else
 fi
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/lib/config.sh"
 DEFAULT_CONFIG="${BASE_DIR}/configs/config.yaml"
 CONFIG_DIR="${BASE_DIR}/configs"
 
@@ -47,25 +48,18 @@ get_api_info() {
     fi
     
     # 从配置文件读取 external-controller
-    local controller_line=$(grep -i "external-controller" "$config_file" 2>/dev/null)
-    if [ -n "$controller_line" ]; then
-        # 使用简单的方法提取值，去掉空格
-        CONTROLLER=$(echo "$controller_line" | awk -F 'external-controller:' '{print $2}' | sed 's/^ *//; s/ *$//')
-    else
-        CONTROLLER="127.0.0.1:9090"
-    fi
+    CONTROLLER=$(get_clash_config_value "$config_file" "external-controller")
+    CONTROLLER="${CONTROLLER:-127.0.0.1:9090}"
     
     # 提取 IP 和端口
     API_IP=$(echo "$CONTROLLER" | cut -d: -f1)
     API_PORT=$(echo "$CONTROLLER" | cut -d: -f2)
     
     # 处理密码认证（如果有）
-    local secret_line=$(grep -i "secret" "$config_file" 2>/dev/null)
-    if [ -n "$secret_line" ]; then
-        SECRET=$(echo "$secret_line" | awk -F 'secret:' '{print $2}' | sed 's/^ *//; s/ *$//')
-        API_AUTH="-H 'Authorization: Bearer $SECRET'"
-    else
-        API_AUTH=""
+    SECRET=$(get_clash_config_value "$config_file" "secret")
+    CURL_AUTH_ARGS=()
+    if [ -n "$SECRET" ]; then
+        CURL_AUTH_ARGS=(-H "Authorization: Bearer $SECRET")
     fi
     
     # 从配置文件获取代理端口
@@ -91,14 +85,14 @@ get_proxy_groups() {
     local url="http://$CONTROLLER/proxies"
     
     # 测试API连接
-    if ! curl -s $API_AUTH "$url" > /dev/null 2>&1; then
+    if ! curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url" > /dev/null 2>&1; then
         echo -e "${RED}错误：无法连接到 Clash API！${NC}"
         echo -e "${YELLOW}提示：请确保 Clash 已启动且 API 配置正确。${NC}"
         return 1
     fi
     
     # 获取代理组列表
-    PROXY_GROUPS=$(curl -s $API_AUTH "$url" | python3 -c "
+    PROXY_GROUPS=$(curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url" | python3 -c "
 import json
 data = json.loads(input())
 groups = []
@@ -198,12 +192,12 @@ echo -e "${BLUE}当前节点组：${NC}$PROXY_GROUP"
 
 # 获取当前节点信息
 url="http://$CONTROLLER/proxies/$PROXY_GROUP"
-CURRENT_NODE=$(curl -s $API_AUTH "$url" | python3 -c "import json; data = json.loads(input()); print(data.get('now', '未知'))")
+CURRENT_NODE=$(curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url" | python3 -c "import json; data = json.loads(input()); print(data.get('now', '未知'))")
 echo -e "${BLUE}当前选中节点：${NC}$CURRENT_NODE"
 echo ""
 
 # 获取可用节点列表
-NODES_JSON=$(curl -s $API_AUTH "$url")
+NODES_JSON=$(curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url")
 NODES_LIST=$(echo "$NODES_JSON" | python3 -c "import json; data = json.loads(input()); print('\n'.join(data.get('all', [])))")
 
 # 将节点列表转换为数组
@@ -295,13 +289,13 @@ echo -e "${BLUE}正在切换到节点：${NC}$SELECTED_NODE"
 echo "----------------"
 
 # 使用curl命令切换节点
-if curl -s -X PUT $API_AUTH -d "{\"name\": \"$SELECTED_NODE\"}" "$url" > /dev/null 2>&1; then
+if curl --noproxy '*' -s -X PUT "${CURL_AUTH_ARGS[@]}" -d "{\"name\": \"$SELECTED_NODE\"}" "$url" > /dev/null 2>&1; then
     # 验证切换结果
     echo -e "${YELLOW}等待节点切换完成...${NC}"
     sleep 2  # 增加等待时间，确保切换生效
     
     # 重新获取当前节点信息
-    proxy_info=$(curl -s $API_AUTH "$url")
+    proxy_info=$(curl --noproxy '*' -s "${CURL_AUTH_ARGS[@]}" "$url")
     NEW_CURRENT_NODE=$(echo "$proxy_info" | python3 -c "import json; print(json.loads(input()).get('now', ''))")
     ALL_PROXIES=$(echo "$proxy_info" | python3 -c "import json; data = json.loads(input()); print('\\n'.join(data.get('all', [])))")
     

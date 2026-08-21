@@ -19,6 +19,8 @@ else
 fi
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/runtime.sh"
 DEFAULT_CONFIG="${BASE_DIR}/configs/config.yaml"
 CONFIG_DIR="${BASE_DIR}/configs"
 LOG_DIR="${BASE_DIR}/logs"
@@ -62,32 +64,19 @@ fi
 CONFIG_NAME="$(basename "$CONFIG_FILE" .yaml)"
 LOG_FILE="${LOG_DIR}/clash_${CONFIG_NAME}.log"
 
-# 检查并自动下载 Country.mmdb 数据库
+# 检查并自动修复 Mihomo 地理数据库
 MIHOMO_DIR="$HOME/.config/mihomo"
 CLASH_DIR="$HOME/.config/clash"
-MMDB_URL="https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-
-mkdir -p "$MIHOMO_DIR"
-mkdir -p "$CLASH_DIR"
-
-if [ ! -f "$MIHOMO_DIR/Country.mmdb" ] && [ ! -f "$CLASH_DIR/Country.mmdb" ]; then
-    echo -e "${YELLOW}检测到缺少 Country.mmdb 数据库...${NC}"
-    echo -e "${BLUE}正在通过国内加速源(jsDelivr)自动下载...${NC}"
-    curl -Lo "$MIHOMO_DIR/Country.mmdb" "$MMDB_URL"
-    if [ $? -eq 0 ]; then
-        cp "$MIHOMO_DIR/Country.mmdb" "$CLASH_DIR/Country.mmdb" 2>/dev/null
-        echo -e "${GREEN}✓ 数据库下载成功！${NC}"
-    else
-        echo -e "${RED}✗ 数据库下载失败！这可能会导致 Clash 启动崩溃。${NC}"
-    fi
-else
-    # 确保两个目录都有，以兼容不同的核心版本
-    if [ -f "$CLASH_DIR/Country.mmdb" ] && [ ! -f "$MIHOMO_DIR/Country.mmdb" ]; then
-        cp "$CLASH_DIR/Country.mmdb" "$MIHOMO_DIR/Country.mmdb" 2>/dev/null
-    elif [ -f "$MIHOMO_DIR/Country.mmdb" ] && [ ! -f "$CLASH_DIR/Country.mmdb" ]; then
-        cp "$MIHOMO_DIR/Country.mmdb" "$CLASH_DIR/Country.mmdb" 2>/dev/null
-    fi
+echo -e "${BLUE}正在检查 Country.mmdb 和 GeoSite.dat...${NC}"
+if ! ensure_clash_geodata "$MIHOMO_DIR" "$CLASH_DIR"; then
+    echo -e "${RED}错误：地理数据库准备失败，已取消启动以避免 Clash 崩溃。${NC}"
+    return 1 2>/dev/null || exit 1
 fi
+
+# API 必须在设置代理环境变量之前读取并用于启动检查。
+CONTROLLER=$(get_clash_config_value "$CONFIG_FILE" "external-controller")
+CONTROLLER="${CONTROLLER:-127.0.0.1:9090}"
+SECRET=$(get_clash_config_value "$CONFIG_FILE" "secret")
 
 # 启动 Clash 代理服务器
 echo -e "${BLUE}正在启动 Clash，请稍候...${NC}"
@@ -95,21 +84,19 @@ echo -e "${BLUE}正在启动 Clash，请稍候...${NC}"
 # 自动创建日志目录
 mkdir -p "$LOG_DIR"
 
-# 自动处理 external-controller 引号问题
-if [ -f "$CONFIG_FILE" ]; then
-    # 移除 external-controller 值的单引号或双引号
-    sed -i "s/external-controller: ['\"]\(.*\)['\"]/external-controller: \1/g" "$CONFIG_FILE"
-fi
-
 nohup "$CLASH_BIN" -f "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
 CLASH_PID=$!
 
-# 等待 Clash 启动
-
-# 检查 Clash 是否成功启动
-if ! ps -p $CLASH_PID > /dev/null; then
+# 等待 API 真正可用，同时检测初始化期间的进程退出。
+wait_for_clash_api "$CLASH_PID" "$CONTROLLER" "$SECRET" 60
+START_RESULT=$?
+if [ "$START_RESULT" -ne 0 ]; then
     echo -e "${RED}错误：Clash 启动失败！${NC}"
-    echo -e "${YELLOW}提示：请查看日志文件 '${LOG_FILE}' 了解详细错误信息。${NC}"
+    if [ "$START_RESULT" -eq 2 ]; then
+        echo -e "${YELLOW}提示：等待 API 就绪超时，Clash 进程可能仍在初始化。${NC}"
+    fi
+    echo -e "${YELLOW}最近的启动日志：${NC}"
+    tail -n 20 "$LOG_FILE" 2>/dev/null
     return 1 2>/dev/null || exit 1
 fi
 
@@ -132,12 +119,6 @@ export http_proxy=http://127.0.0.1:$PORT
 export https_proxy=http://127.0.0.1:$PORT
 export ALL_PROXY=socks5://127.0.0.1:$PORT
 export all_proxy=socks5://127.0.0.1:$PORT
-
-# 获取 external-controller 配置（用于 API 访问）
-CONTROLLER=$(grep -oP 'external-controller:\s*\K[^\s]+' "$CONFIG_FILE" 2>/dev/null)
-if [ -z "$CONTROLLER" ]; then
-    CONTROLLER="127.0.0.1:9090"
-fi
 
 # 输出启动信息
 echo -e "${GREEN}✓ Clash 代理已成功激活！${NC}"
