@@ -32,6 +32,12 @@ for installed_file in "$MIHOMO_TEST_DIR/GeoSite.dat" "$CLASH_TEST_DIR/GeoSite.da
     [ "$(calculate_sha256 "$installed_file")" = "$expected_geosite" ]
 done
 
+# 后续启动只使用本地校验记录，不再依赖滚动更新中的远程校验文件。
+GEODATA_BASE_URL="file://$TMP_DIR/unavailable"
+ensure_clash_geodata "$MIHOMO_TEST_DIR" "$CLASH_TEST_DIR"
+[ "$(sed -n '1p' "$MIHOMO_TEST_DIR/Country.mmdb.sha256")" = "$expected_country" ]
+[ "$(sed -n '1p' "$MIHOMO_TEST_DIR/GeoSite.dat.sha256")" = "$expected_geosite" ]
+
 # API 就绪检查必须绕过代理；模拟成功响应以验证等待逻辑。
 curl() {
     [ "$1" = "--noproxy" ] && [ "$2" = "*" ]

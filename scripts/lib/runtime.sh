@@ -12,14 +12,78 @@ calculate_sha256() {
     fi
 }
 
+is_plausible_geodata() {
+    local local_name="$1"
+    local file="$2"
+    local file_size
+
+    [ -f "$file" ] || return 1
+    file_size=$(wc -c < "$file" | tr -d '[:space:]')
+    [ "$file_size" -ge 1048576 ] || return 1
+
+    # MaxMind DB 的元数据区包含固定标识；GeoSite 是无固定魔数的 protobuf，
+    # 因此至少要求达到完整数据库的合理体积。
+    if [ "$local_name" = "Country.mmdb" ]; then
+        LC_ALL=C grep -aFq "MaxMind.com" "$file" || return 1
+    fi
+    return 0
+}
+
+install_verified_geodata() {
+    local source_file="$1"
+    local checksum="$2"
+    local mihomo_file="$3"
+    local clash_file="$4"
+
+    if [ "$source_file" != "$mihomo_file" ]; then
+        cp "$source_file" "$mihomo_file"
+    fi
+    if [ "$source_file" != "$clash_file" ]; then
+        cp "$source_file" "$clash_file"
+    fi
+    printf '%s\n' "$checksum" > "${mihomo_file}.sha256"
+    printf '%s\n' "$checksum" > "${clash_file}.sha256"
+}
+
 ensure_geodata_asset() {
     local local_name="$1"
     local remote_name="$2"
     local mihomo_dir="$3"
     local clash_dir="$4"
-    local checksum_file download_file expected_checksum actual_checksum source_file
+    local checksum_file download_file expected_checksum actual_checksum saved_checksum source_file
     local mihomo_file="${mihomo_dir}/${local_name}"
     local clash_file="${clash_dir}/${local_name}"
+
+    mkdir -p "$mihomo_dir" "$clash_dir"
+
+    # 优先验证本地记录。地理数据库是启动依赖，不应在每次启动时被远程滚动
+    # 更新和 CDN 缓存时差阻断。
+    source_file=""
+    for candidate in "$mihomo_file" "$clash_file"; do
+        if [ -f "$candidate" ] && [ -f "${candidate}.sha256" ]; then
+            saved_checksum=$(sed -n '1p' "${candidate}.sha256")
+            actual_checksum=$(calculate_sha256 "$candidate")
+            if [[ "$saved_checksum" =~ ^[0-9a-f]{64}$ ]] && [ "$actual_checksum" = "$saved_checksum" ]; then
+                source_file="$candidate"
+                expected_checksum="$saved_checksum"
+                break
+            fi
+        fi
+    done
+
+    if [ -n "$source_file" ]; then
+        install_verified_geodata "$source_file" "$expected_checksum" "$mihomo_file" "$clash_file"
+        return 0
+    fi
+
+    # 兼容升级前已成功使用但尚无本地校验记录的数据库。
+    for candidate in "$mihomo_file" "$clash_file"; do
+        if is_plausible_geodata "$local_name" "$candidate"; then
+            actual_checksum=$(calculate_sha256 "$candidate")
+            install_verified_geodata "$candidate" "$actual_checksum" "$mihomo_file" "$clash_file"
+            return 0
+        fi
+    done
 
     checksum_file=$(mktemp)
     download_file=$(mktemp)
@@ -37,17 +101,6 @@ ensure_geodata_asset() {
         echo "${local_name} 校验信息格式无效。" >&2
         return 1
     fi
-
-    source_file=""
-    for candidate in "$mihomo_file" "$clash_file"; do
-        if [ -f "$candidate" ]; then
-            actual_checksum=$(calculate_sha256 "$candidate")
-            if [ "$actual_checksum" = "$expected_checksum" ]; then
-                source_file="$candidate"
-                break
-            fi
-        fi
-    done
 
     if [ -z "$source_file" ]; then
         echo "正在下载并校验 ${local_name}..."
@@ -67,13 +120,7 @@ ensure_geodata_asset() {
         source_file="$download_file"
     fi
 
-    mkdir -p "$mihomo_dir" "$clash_dir"
-    if [ "$source_file" != "$mihomo_file" ]; then
-        cp "$source_file" "$mihomo_file"
-    fi
-    if [ "$source_file" != "$clash_file" ]; then
-        cp "$source_file" "$clash_file"
-    fi
+    install_verified_geodata "$source_file" "$expected_checksum" "$mihomo_file" "$clash_file"
 
     rm -f "$checksum_file" "$download_file"
     return 0
