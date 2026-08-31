@@ -22,8 +22,10 @@
 依赖：python3 + PyYAML（Debian/Ubuntu: apt install python3-yaml；或 pip install pyyaml）
 """
 import base64
+import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -190,20 +192,54 @@ def build_config(nodes, old_config):
     return head + "\n" + "\n".join(body) + "\n" + tail + "\n"
 
 
-def set_default_group():
-    """更新后把 节点选择 切到 自动选择（URLTest 自动选活节点），实现坏节点自愈"""
+def node_alive(server, port, timeout=4):
+    """TCP 探测节点服务器端口是否可达"""
     try:
-        import json
-        req = urllib.request.Request(
-            "http://127.0.0.1:9090/proxies/" + urllib.parse.quote("节点选择"),
+        ip = socket.gethostbyname(server)
+        sock = socket.create_connection((ip, port), timeout=timeout)
+        sock.close()
+        return True
+    except Exception:
+        return False
+
+
+def ensure_group_alive(nodes, retries=3, delay=15):
+    """更新后检查 节点选择 组：
+    - 当前为 自动选择 -> 保持（最省心，无需等待）
+    - 手动指定了具体节点 -> 探测其最新 server:port 是否存活：
+        存活则保留手动选择；失效则切回 自动选择（坏节点自愈）
+    新端口有生效延迟，故做多次重试再下结论。
+    """
+    try:
+        base = "http://127.0.0.1:9090/proxies/"
+        req = urllib.request.Request(base + urllib.parse.quote("节点选择"))
+        with urllib.request.urlopen(req, timeout=5) as r:
+            cur = json.loads(r.read().decode()).get("now")
+        if not cur or cur == "自动选择":
+            log("节点选择 当前为 自动选择，保持自动")
+            return True
+        target = next((n for n in nodes if n["name"] == cur), None)
+        if target is None:
+            log("手动选择的节点「%s」已不在订阅中，切换回 自动选择" % cur)
+        else:
+            for attempt in range(1, retries + 1):
+                if node_alive(target["server"], target["port"]):
+                    log("保留手动选择的节点「%s」（存活，第 %d 次探测通过）" % (cur, attempt))
+                    return True
+                if attempt < retries:
+                    log("节点「%s」探测失败（第 %d/%d 次），%ds 后重试..." % (cur, attempt, retries, delay))
+                    time.sleep(delay)
+            log("手动选择的节点「%s」已失效，切换回 自动选择" % cur)
+        req2 = urllib.request.Request(
+            base + urllib.parse.quote("节点选择"),
             data=json.dumps({"name": "自动选择"}).encode(),
             headers={"Content-Type": "application/json"},
             method="PUT",
         )
-        with urllib.request.urlopen(req, timeout=5) as r:
+        with urllib.request.urlopen(req2, timeout=5) as r:
             return r.status == 204
     except Exception as e:
-        log("设置默认策略组失败: %s" % e)
+        log("检查策略组失败: %s" % e)
         return False
 
 
@@ -258,9 +294,7 @@ def main():
     log("配置已更新：%d 个节点，旧配置备份到 %s" % (len(nodes), bak))
     if restart_clash():
         log("Clash 已重启")
-        time.sleep(2)
-        if set_default_group():
-            log("已将 节点选择 切到 自动选择（URLTest 自动选活节点）")
+        ensure_group_alive(nodes)
         return 0
     log("警告: Clash 重启可能失败，请检查 clash 日志")
     return 1
