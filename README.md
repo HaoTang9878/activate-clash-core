@@ -61,9 +61,13 @@ activate-clash          # 启动代理（后台运行，自动设置代理环境
 select-node             # 选择节点（键盘交互，自动测速）
 clash-status            # 查看运行状态和日志
 deactivate-clash        # 停止代理并清理环境变量
+proxy_on                # 当前终端开启代理（clash 在跑则只设变量，秒开）
+proxy_off               # 当前终端清除代理环境变量
 ```
 
 启动后代理监听 `127.0.0.1:7890`（mixed-port，HTTP/SOCKS5 通用），控制 API 位于 `127.0.0.1:9090`。
+
+> **proxy_on 说明**：代理环境变量（`http_proxy` 等）按终端隔离——Clash 进程常驻后台，但新建终端不会自动带上代理。输入 `proxy_on` 即可为当前终端开启代理：若 Clash 已在运行则仅设置环境变量（秒开），若未运行则自动调用 `activate-clash` 启动。`proxy_off` 一键清除。
 
 ---
 
@@ -112,6 +116,8 @@ SUB_DRY_RUN=1 python3 scripts/update-clash-sub.py
 | `clash-status` | **查看状态** (运行状态、日志) |
 | `deactivate-clash` | **关闭代理** (停止进程、清理变量) |
 | `python3 scripts/update-clash-sub.py` | **手动更新订阅** (自动重启) |
+| `proxy_on` | **当前终端开启代理** (clash 在跑则只设变量) |
+| `proxy_off` | **当前终端清除代理变量** |
 
 ---
 

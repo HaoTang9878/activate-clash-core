@@ -179,7 +179,7 @@ def build_config(nodes, old_config):
 
     groups = [
         "{ name: 节点选择, type: select, proxies: [自动选择], include-all: true }",
-        "{ name: 自动选择, type: url-test, include-all: true, url: 'http://cp.cloudflare.com', interval: 7200 }",
+        "{ name: 自动选择, type: url-test, include-all: true, url: 'http://cp.cloudflare.com', interval: 300 }",
         "{ name: 港台番剧, type: select, include-all: true, proxies: [DIRECT] }",
         "{ name: 国际媒体, type: select, include-all: true, proxies: [节点选择] }",
         "{ name: 电报代理, type: select, include-all: true, proxies: [节点选择] }",
@@ -188,6 +188,23 @@ def build_config(nodes, old_config):
     body.append("proxy-groups:")
     body.extend("    - " + g for g in groups)
     return head + "\n" + "\n".join(body) + "\n" + tail + "\n"
+
+
+def set_default_group():
+    """更新后把 节点选择 切到 自动选择（URLTest 自动选活节点），实现坏节点自愈"""
+    try:
+        import json
+        req = urllib.request.Request(
+            "http://127.0.0.1:9090/proxies/" + urllib.parse.quote("节点选择"),
+            data=json.dumps({"name": "自动选择"}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status == 204
+    except Exception as e:
+        log("设置默认策略组失败: %s" % e)
+        return False
 
 
 def restart_clash():
@@ -241,6 +258,9 @@ def main():
     log("配置已更新：%d 个节点，旧配置备份到 %s" % (len(nodes), bak))
     if restart_clash():
         log("Clash 已重启")
+        time.sleep(2)
+        if set_default_group():
+            log("已将 节点选择 切到 自动选择（URLTest 自动选活节点）")
         return 0
     log("警告: Clash 重启可能失败，请检查 clash 日志")
     return 1

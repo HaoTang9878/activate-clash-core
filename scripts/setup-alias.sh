@@ -26,6 +26,7 @@ function show_help() {
     echo ""
     echo -e "${BLUE}功能：${NC}"
     echo -e "  自动配置 Clash 相关命令的别名到 shell 配置文件"
+    echo -e "  自动安装 proxy_on / proxy_off 代理快捷函数"
     echo -e "  支持 bash 和 zsh 环境"
     echo -e "  支持卸载功能"
     echo ""
@@ -121,6 +122,17 @@ function install_aliases() {
         echo "$ALIAS4" >> "$config_file"
         echo -e "${GREEN}✓ alias clash-status 已添加到 ${shell_type} 配置中${NC}"
     fi
+
+    # 检查 proxy_on/proxy_off 函数是否已配置
+    if grep -q "proxy-functions.sh" "$config_file"; then
+        echo -e "${GREEN}✓ proxy_on/proxy_off 已存在于 ${shell_type} 配置中${NC}"
+    else
+        # 追加 source 行
+        echo "" >> "$config_file"
+        echo "# proxy_on / proxy_off 代理快捷函数" >> "$config_file"
+        echo "source $SCRIPT_DIR/proxy-functions.sh" >> "$config_file"
+        echo -e "${GREEN}✓ proxy_on/proxy_off 已添加到 ${shell_type} 配置中${NC}"
+    fi
     
     echo ""
     echo -e "${BLUE}✨ 配置已完成!${NC}"
@@ -133,6 +145,8 @@ function install_aliases() {
     echo -e "  ${BLUE}select-node${NC}      # 选择代理节点"
     echo -e "  ${BLUE}deactivate-clash${NC} # 关闭代理"
     echo -e "  ${BLUE}clash-status${NC}     # 查看状态"
+    echo -e "  ${BLUE}proxy_on${NC}         # 当前终端开启代理环境变量"
+    echo -e "  ${BLUE}proxy_off${NC}        # 当前终端清除代理环境变量"
 }
 
 # 卸载别名
@@ -184,6 +198,15 @@ function uninstall_aliases() {
         echo -e "${GREEN}✓ alias clash-status 已从 ${shell_type} 配置中移除${NC}"
     else
         echo -e "${YELLOW}✗ alias clash-status 不存在于 ${shell_type} 配置中${NC}"
+    fi
+
+    # 卸载 proxy 函数
+    if grep -q "proxy-functions.sh" "$config_file"; then
+        sed -i '/proxy-functions.sh/d' "$config_file"
+        sed -i '/# proxy_on \/ proxy_off 代理快捷函数/d' "$config_file"
+        echo -e "${GREEN}✓ proxy_on/proxy_off 已从 ${shell_type} 配置中移除${NC}"
+    else
+        echo -e "${YELLOW}✗ proxy_on/proxy_off 不存在于 ${shell_type} 配置中${NC}"
     fi
     
     echo ""
