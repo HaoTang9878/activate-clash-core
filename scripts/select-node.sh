@@ -20,6 +20,10 @@ BASE_DIR="$(dirname "$SCRIPT_DIR")"
 DEFAULT_CONFIG="${BASE_DIR}/configs/config.yaml"
 CONFIG_DIR="${BASE_DIR}/configs"
 
+# 测速参数（对每个节点单独测延迟）
+SPEED_URL="http://www.gstatic.com/generate_204"
+SPEED_TIMEOUT=3000
+
 # 从配置文件获取API地址和代理端口
 get_api_info() {
     local config_file="${1:-$DEFAULT_CONFIG}"
@@ -217,36 +221,102 @@ fi
 
 LAST_INDEX=$((NODE_COUNT - 1))
 
-# 显示节点列表，带数字索引
- echo -e "${BLUE}可用节点列表：${NC}"
- echo "----------------"
- # 过滤并显示实际代理节点
- real_nodes=()
- real_nodes_indices=()
- 
- # 重置节点计数器
- node_counter=0
- 
- for i in "${!NODES_ARRAY[@]}"; do
-     node="${NODES_ARRAY[$i]}"
-     # 跳过非实际代理节点
-     if [[ "$node" == "节点选择" || "$node" == "剩余流量："* || "$node" == "套餐到期："* || "$node" == "DIRECT" || "$node" == "REJECT" ]]; then
-         continue
-     fi
-     
-     real_nodes+=("$node")
-     real_nodes_indices+=("$i")
-     
-     # 高亮显示当前选中的节点
-     if [ "$node" == "$CURRENT_NODE" ]; then
-         echo -e "${GREEN}[$node_counter] $node${NC}"  # 绿色高亮
-     else
-         echo "[$node_counter] $node"
-     fi
-     
-     # 增加节点计数器
-     ((node_counter++))
- done
+# ---- 并发测速所有节点，获取实时延迟 ----
+echo -e "${YELLOW}正在测速全部节点（约 5-15 秒），请稍候...${NC}"
+DELAY_FILE="/tmp/select-node-delays-$$.txt"
+printf '%s\n' "${NODES_ARRAY[@]}" | python3 -c "
+import json, sys, urllib.parse, urllib.request, concurrent.futures
+nodes = [l for l in sys.stdin.read().splitlines() if l]
+base = 'http://127.0.0.1:9090/proxies/'
+test_url = '$SPEED_URL'
+op = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 本地 API 不走代理
+
+def test(name):
+    try:
+        u = base + urllib.parse.quote(name) + '/delay?url=' + urllib.parse.quote(test_url, safe='') + '&timeout=$SPEED_TIMEOUT'
+        with op.open(urllib.request.Request(u), timeout=10) as r:
+            d = json.loads(r.read().decode())
+            return (name, int(d.get('delay', -1)))
+    except Exception:
+        return (name, -1)
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=30) as ex:
+    for name, delay in ex.map(test, nodes):
+        print('%s\t%s' % (name, delay))
+" > "$DELAY_FILE" 2>/dev/null
+trap 'rm -f "$DELAY_FILE"' EXIT
+
+declare -A DELAY_MAP
+while IFS=$'\t' read -r n d; do
+    DELAY_MAP["$n"]="$d"
+done < "$DELAY_FILE"
+
+# ---- 显示节点列表（自动选择置顶，其余按延迟升序，超时排最后）----
+echo -e "${BLUE}可用节点列表（按延迟排序）：${NC}"
+echo "----------------"
+
+real_nodes=()
+real_nodes_indices=()
+node_counter=0
+entries=()
+
+# 过滤非实际代理节点并组装 (延迟|原始索引|节点名)
+for i in "${!NODES_ARRAY[@]}"; do
+    node="${NODES_ARRAY[$i]}"
+    if [[ "$node" == "节点选择" || "$node" == "剩余流量："* || "$node" == "套餐到期："* || "$node" == "DIRECT" || "$node" == "REJECT" ]]; then
+        continue
+    fi
+    d="${DELAY_MAP[$node]:-99999}"
+    [ "$d" = "-1" ] && d=99999
+    entries+=("$d|$i|$node")
+done
+
+# 自动选择固定置顶
+auto_entry=""
+kept=()
+for e in "${entries[@]}"; do
+    if [[ "$e" == *"|自动选择" ]]; then
+        auto_entry="$e"
+    else
+        kept+=("$e")
+    fi
+done
+
+# 其余按延迟升序（99999 超时自然排最后）
+mapfile -t SORTED < <(printf '%s\n' "${kept[@]}" | sort -t'|' -k1,1n)
+if [ -n "$auto_entry" ]; then
+    SORTED=("$auto_entry" "${SORTED[@]}")
+fi
+
+for entry in "${SORTED[@]}"; do
+    d="${entry%%|*}"
+    rest="${entry#*|}"
+    i="${rest%%|*}"
+    node="${rest#*|}"
+    real_nodes+=("$node")
+    real_nodes_indices+=("$i")
+
+    # 延迟着色：<300ms 绿，300-800ms 黄，>800ms/超时 红
+    if [ "$d" = "99999" ]; then
+        delay_str="${RED}超时${NC}"
+    elif [ "$d" -le 300 ]; then
+        delay_str="${GREEN}${d}ms${NC}"
+    elif [ "$d" -le 800 ]; then
+        delay_str="${YELLOW}${d}ms${NC}"
+    else
+        delay_str="${RED}${d}ms${NC}"
+    fi
+
+    # 高亮显示当前选中的节点
+    if [ "$node" == "$CURRENT_NODE" ]; then
+        echo -e "${GREEN}[$node_counter] $node  $delay_str${NC}  ← 当前"
+    else
+        echo -e "[$node_counter] $node  $delay_str"
+    fi
+
+    # 增加节点计数器
+    ((node_counter++))
+done
 
 echo "----------------"
 echo ""
@@ -315,6 +385,13 @@ if curl -s -X PUT $API_AUTH -d "{\"name\": \"$SELECTED_NODE\"}" "$url" > /dev/nu
         echo -e "${GREEN}✓ 切换成功！${NC}"
         echo -e "${BLUE}当前节点：${NC}$SELECTED_NODE"
         echo -e "${BLUE}当前IP：${NC}$current_ip"
+        # 显示该节点的测速延迟
+        nd="${DELAY_MAP[$SELECTED_NODE]:-99999}"
+        if [ "$nd" != "-1" ] && [ "$nd" != "99999" ]; then
+            echo -e "${BLUE}当前延迟：${NC}${nd}ms"
+        else
+            echo -e "${BLUE}当前延迟：${NC}${RED}超时/未知${NC}"
+        fi
     else
         echo -e "${RED}✗ 切换可能成功，但无法获取IP${NC}"
     fi

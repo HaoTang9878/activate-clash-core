@@ -9,7 +9,7 @@
 ## ✨ 核心功能
 
 *   **一键起飞**：`activate-clash` 启动代理
-*   **节点选择**：`select-node` 可视化切换节点（自动测速、显示IP）
+*   **节点选择**：`select-node` 可视化切换节点（并发测速、按延迟排序、显示IP）
 *   **一键关闭**：`deactivate-clash` 停止代理并清理环境
 *   **状态监控**：`clash-status` 查看运行状态和日志
 *   **自动配置**：自动设置 `http_proxy` 等环境变量，无需手动 export
@@ -114,7 +114,7 @@ SUB_DRY_RUN=1 python3 scripts/update-clash-sub.py
 | 命令 | 说明 |
 | :--- | :--- |
 | `activate-clash` | **启动代理** (自动后台运行) |
-| `select-node` | **切换节点** (支持键盘选择) |
+| `select-node` | **切换节点** (并发测速、按延迟排序) |
 | `clash-status` | **查看状态** (运行状态、日志) |
 | `deactivate-clash` | **关闭代理** (停止进程、清理变量) |
 | `python3 scripts/update-clash-sub.py` | **手动更新订阅** (自动重启) |
