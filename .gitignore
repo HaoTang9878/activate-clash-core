@@ -20,3 +20,6 @@ backups/*
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# 订阅链接（含 token，禁止入库）
+sub_url.txt
