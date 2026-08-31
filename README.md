@@ -103,6 +103,8 @@ SUB_DRY_RUN=1 python3 scripts/update-clash-sub.py
 
 > **依赖**：python3 + PyYAML（Debian/Ubuntu: `apt install python3-yaml`；或 `pip install pyyaml`）
 >
+> **手动选择 vs 自动更新**：更新后脚本会**保留**你用 `select-node` 手动选择的节点（探测存活则保留）；仅当该节点失效时才自动切回 `自动选择`。
+>
 > **提示**：部分机场每次拉取订阅会轮换约 1/4 的端口，且新端口需要 1-2 分钟才生效。更新完成后如果立刻访问超时，稍等片刻再试即可。
 
 ---
