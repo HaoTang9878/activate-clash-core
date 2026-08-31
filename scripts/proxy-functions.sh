@@ -28,6 +28,9 @@ proxy_on() {
     else
         source "$DIR/activate"
     fi
+    # 本地地址不走代理（避免 select-node / API 调用被代理劫持）
+    export no_proxy="localhost,127.0.0.1"
+    export NO_PROXY="localhost,127.0.0.1"
 }
 
 proxy_off() {

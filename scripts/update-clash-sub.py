@@ -237,8 +237,9 @@ def ensure_group_alive(nodes, retries=3, delay=15):
     """
     try:
         base = "http://127.0.0.1:9090/proxies/"
+        op = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 本地 API 不走代理
         req = urllib.request.Request(base + urllib.parse.quote("节点选择"))
-        with urllib.request.urlopen(req, timeout=5) as r:
+        with op.open(req, timeout=5) as r:
             cur = json.loads(r.read().decode()).get("now")
         if not cur or cur == "自动选择":
             log("节点选择 当前为 自动选择，保持自动")
@@ -261,7 +262,7 @@ def ensure_group_alive(nodes, retries=3, delay=15):
             headers={"Content-Type": "application/json"},
             method="PUT",
         )
-        with urllib.request.urlopen(req2, timeout=5) as r:
+        with op.open(req2, timeout=5) as r:
             return r.status == 204
     except Exception as e:
         log("检查策略组失败: %s" % e)
