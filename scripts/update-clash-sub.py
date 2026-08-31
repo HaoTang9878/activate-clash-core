@@ -45,6 +45,26 @@ WORKDIR = os.environ.get("SUB_WORKDIR") or os.getcwd()
 DRY_RUN = os.environ.get("SUB_DRY_RUN") == "1"
 UA = "clash-verge/v1.8.2"
 
+# 全新安装（无现有 config.yaml）时使用的默认配置头部与规则
+DEFAULT_HEAD = """mixed-port: 7890
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: info
+external-controller: 127.0.0.1:9090
+dns:
+    enable: true
+    ipv6: false
+    default-nameserver: [223.5.5.5, 119.29.29.29]
+    enhanced-mode: fake-ip
+    fake-ip-range: 198.18.0.1/16
+    use-hosts: true
+    nameserver: [223.5.5.5, 119.29.29.29, 'https://223.5.5.5/dns-query', 'https://120.53.53.53/dns-query', 'https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query']
+    proxy-server-nameserver: [223.5.5.5, 119.29.29.29, 'https://223.5.5.5/dns-query', 'https://120.53.53.53/dns-query', 'https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query']
+proxies:
+"""
+DEFAULT_RULES = "rules:\n    - 'MATCH,节点选择'\n"
+
 
 def log(msg):
     line = "[%s] %s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), msg)
@@ -147,21 +167,26 @@ def quote(s):
 
 
 def build_config(nodes, old_config):
-    """保留旧配置的头部(proxies: 之前)与 rules 段，重建 proxies + proxy-groups"""
-    lines = old_config.split("\n")
+    """保留旧配置的头部(proxies: 之前)与 rules 段，重建 proxies + proxy-groups；
+    若旧配置不存在（全新安装），使用默认头部与默认规则。"""
+    if old_config is None:
+        head = DEFAULT_HEAD
+        tail = DEFAULT_RULES
+    else:
+        lines = old_config.split("\n")
 
-    def find(key):
-        for i, l in enumerate(lines):
-            if l.strip().startswith(key + ":"):
-                return i
-        return -1
+        def find(key):
+            for i, l in enumerate(lines):
+                if l.strip().startswith(key + ":"):
+                    return i
+            return -1
 
-    pi = find("proxies")
-    ri = find("rules")
-    if pi < 0 or ri < 0 or ri <= pi:
-        raise RuntimeError("旧配置结构异常：找不到 proxies:/rules: 段")
-    head = "\n".join(lines[:pi + 1])   # 含 'proxies:' 行
-    tail = "\n".join(lines[ri:])       # 含 'rules:' 行
+        pi = find("proxies")
+        ri = find("rules")
+        if pi < 0 or ri < 0 or ri <= pi:
+            raise RuntimeError("旧配置结构异常：找不到 proxies:/rules: 段")
+        head = "\n".join(lines[:pi + 1])   # 含 'proxies:' 行
+        tail = "\n".join(lines[ri:])       # 含 'rules:' 行
 
     body = []
     for n in nodes:
@@ -259,6 +284,9 @@ def restart_clash():
 
 
 def main():
+    # 确保目录存在（configs/logs 均在 .gitignore 中，新克隆的仓库没有这些目录）
+    os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+    os.makedirs(os.path.dirname(LOG), exist_ok=True)
     if not os.path.exists(SUB_URL_FILE):
         log("错误: 找不到订阅链接文件 %s（请把订阅 URL 写入该文件）" % SUB_URL_FILE)
         return 1
@@ -277,7 +305,11 @@ def main():
         log("解析出的节点过少(%d)，疑似订阅异常，放弃更新" % len(nodes))
         return 1
     log("下载并解析成功：%d 个节点" % len(nodes))
-    old = open(CONFIG, encoding="utf-8").read()
+    if os.path.exists(CONFIG):
+        old = open(CONFIG, encoding="utf-8").read()
+    else:
+        old = None
+        log("未找到现有配置 config.yaml，将生成全新默认配置（首次安装）")
     new = build_config(nodes, old)
     if new == old:
         log("配置与上次一致，跳过重启")
@@ -286,12 +318,14 @@ def main():
         log("DRY RUN：配置将有变化，跳过写入与重启")
         return 0
     os.makedirs(BACKUP_DIR, exist_ok=True)
-    bak = os.path.join(BACKUP_DIR, "config_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".yaml")
-    with open(bak, "w", encoding="utf-8") as f:
-        f.write(old)
+    if old is not None:
+        bak = os.path.join(BACKUP_DIR, "config_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".yaml")
+        with open(bak, "w", encoding="utf-8") as f:
+            f.write(old)
+        log("旧配置已备份到 %s" % bak)
     with open(CONFIG, "w", encoding="utf-8") as f:
         f.write(new)
-    log("配置已更新：%d 个节点，旧配置备份到 %s" % (len(nodes), bak))
+    log("配置已更新：%d 个节点" % len(nodes))
     if restart_clash():
         log("Clash 已重启")
         ensure_group_alive(nodes)
